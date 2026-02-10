@@ -1,0 +1,31 @@
+Caizin Holiday Calendar 2026
+
+Public Holidays:
+- Jan 01: New Year Day
+- Jan 26: Republic Day
+- Mar 04: Holi
+- May 01: Maharashtra Day
+- Aug 15: Independence Day
+- Sept 14: Ganesh Chaturthi
+- Sept 25: Ganesh Visarjan
+- Oct 02: Gandhi Jayanti
+- Nov 08: Diwali
+- Nov 09: Diwali
+
+Floater Holidays:
+- Jan 14: Makar Sankranti
+- Feb 15: Maha Shivratri
+- Mar 19: Gudi Padwa / Ugadi
+- Mar 21: Id-ul-Fitr
+- Apr 03: Good Friday
+- May 27: Bakri Id
+- Jun 26: Muharram
+- Aug 26: Onam
+- Aug 28: Raksha Bandhan
+- Oct 20: Dussehra / Ayudha Puja
+- Nov 10: Diwali
+- Nov 24: Gurunanak Jayanti
+- Dec 25: Christmas Day
+
+Floater Leave Rule:
+- All full-time employees are eligible for a maximum of two floater leaves annually.
