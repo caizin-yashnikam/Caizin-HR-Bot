@@ -1,91 +1,100 @@
+import os
+import requests
+from dotenv import load_dotenv
+from openai import AzureOpenAI
+from azure.search.documents import SearchClient
+from azure.search.documents.models import VectorizedQuery
+from azure.core.credentials import AzureKeyCredential
 
-from langchain_chroma import Chroma
-from langchain_ollama import OllamaEmbeddings, ChatOllama
-from langchain.prompts import PromptTemplate
+load_dotenv()
+
+# =========================
+# CONFIG
+# =========================
+SEARCH_ENDPOINT = os.getenv("AZURE_SEARCH_ENDPOINT")
+SEARCH_KEY = os.getenv("AZURE_SEARCH_KEY")
+INDEX_NAME = os.getenv("AZURE_SEARCH_INDEX")
+
+AZURE_OPENAI_API_KEY = os.getenv("AZURE_OPENAI_API_KEY")
+AZURE_OPENAI_ENDPOINT = os.getenv("AZURE_OPENAI_ENDPOINT")
+AZURE_OPENAI_DEPLOYMENT = os.getenv("AZURE_OPENAI_DEPLOYMENT")
+
+MISTRAL_KEY = os.getenv("MISTRAL_API_KEY")
+
+# =========================
+# CLIENTS
+# =========================
+search_client = SearchClient(
+    endpoint=SEARCH_ENDPOINT,
+    index_name=INDEX_NAME,
+    credential=AzureKeyCredential(SEARCH_KEY),
+)
+
+azure_client = AzureOpenAI(
+    api_key=AZURE_OPENAI_API_KEY,
+    azure_endpoint=AZURE_OPENAI_ENDPOINT,
+    api_version="2024-02-15-preview"
+)
+
+# =========================
+# EMBEDDING
+# =========================
+def get_query_embedding(text):
+    response = azure_client.embeddings.create(
+        model=AZURE_OPENAI_DEPLOYMENT,
+        input=text
+    )
+    return response.data[0].embedding
 
 
-VECTOR_DIR =  "vectorstore"
+# =========================
+# HYBRID SEARCH
+# =========================
+def search_documents(query: str):
+    query_embedding = get_query_embedding(query)
 
-HOLIDAY_KEYWORDS = [
-    "holiday", "holidays", "calendar", "floater", "public holiday"
-]
-
-LIGIBILITY_KEYWORDS = [
-    "can i", "eligible", "entitled", "allowed",
-    "apply for", "does it apply", "in case of"
-]
-
-NUMERIC_KEYWORDS = [
-    "amount", "maximum", "limit", "bonus",
-    "reimbursement", "₹", "rs", "rupees", "%"
-]
-
-ENTITLEMENT_KEYWORDS = [
-    "how many", "total number", "number of",
-    "entitlement", "per year", "leaves"
-]
-
-def is_entitlement_query(question: str) -> bool:
-    q = question.lower()
-    return any(k in q for k in ENTITLEMENT_KEYWORDS)
-
-def is_eligibility_query(question: str) -> bool:
-    q = question.lower()
-    return any(k in q for k in ELIGIBILITY_KEYWORDS)
-
-def is_numeric_query(question: str) -> bool:
-    q = question.lower()
-    return any(k in q for k in NUMERIC_KEYWORDS)
-
-def is_holiday_query(question: str) -> bool:
-    q = question.lower()
-    return any(k in q for k in HOLIDAY_KEYWORDS)
-
-def ask_policy_question(question: str):
-    embeddings = OllamaEmbeddings(model="nomic-embed-text")
-
-    vectordb = Chroma(
-        persist_directory=VECTOR_DIR,
-        embedding_function=embeddings
+    vector_query = VectorizedQuery(
+        vector=query_embedding,
+        k_nearest_neighbors=8,
+        fields="embedding"
     )
 
-    # 🔑 ROUTING LOGIC
-    if is_holiday_query(question):
-        retriever = vectordb.as_retriever(
-            search_kwargs={
-                "k": 20,
-                "filter": {"department": "Holiday"}
-            }
-        )
-
-    elif is_numeric_query(question):
-        retriever = vectordb.as_retriever(
-            search_kwargs={"k": 3}
-        )
-
-    elif is_entitlement_query(question):
-        retriever = vectordb.as_retriever(
-            search_kwargs={
-                "k": 8,
-                "filter": {"department": "Leave"}
-        }
+    results = search_client.search(
+        search_text=query,
+        vector_queries=[vector_query],
+        top=8
     )
 
-    else:
-        retriever = vectordb.as_retriever(
-            search_type="mmr",
-            search_kwargs={"k": 6, "lambda_mult": 0.4}
-        )
+    docs = []
+    seen = set()
+    sources = {}
 
-    llm = ChatOllama(
-        model="mistral-small3.2:latest",
-        temperature=0.0
-    )
+    for r in results:
+        content = r.get("content")
+        policy_name = r.get("policy_name")
+        policy_url = r.get("policy_url")
+
+        if content and content not in seen:
+            docs.append(content)
+            seen.add(content)
+
+        if policy_name and policy_url:
+            sources[policy_name] = policy_url
+
+    return docs[:12], sources   
+
+# =========================
+# MISTRAL GENERATION
+# =========================
+def generate_answer(question: str, context_docs: list):
+    if not context_docs:
+        return "I couldn't find this in the company policy."
+
+    context = "\n\n".join(context_docs)
 
 
-    prompt = PromptTemplate(
-        template="""
-    You are an internal Caizin company policy assistant.
+    prompt = f"""
+You are an internal Caizin company policy assistant.
 
     CRITICAL RULES:
     - Answer ONLY using the provided context.
@@ -94,11 +103,16 @@ def ask_policy_question(question: str):
     - Treat the list as CLOSED.
     - If the user is NOT eligible for a specific leave:
     - Clearly state the ineligibility and the reason.
-    - Then list other leave types that are defined in the policy,
-        WITHOUT assuming the user qualifies for them.
+    - HANDLING INELIGIBILITY:
+       - If the user is NOT eligible, clearly state the reason based on the text.
+       - IF AND ONLY IF the user asked about a specific "Leave Type" (like Sick Leave), you may list other available leave types.
+       - IF the user asked about "Benefits" or "Reimbursements" (like Gym/Fitness), DO NOT list leave types. Only mention alternative financial benefits if they exist in the text.
     - Do NOT invent leave categories.
     - For numeric values, copy them EXACTLY as written.
     - If no alternatives are mentioned in the policy, state that explicitly.
+    - For final confirmation and official applicability, please verify the policy details with HR.
+
+
 
     Context:
     {context}
@@ -106,20 +120,46 @@ def ask_policy_question(question: str):
     Question:
     {question}
 
-    Answer (policy-compliant and helpful):
-    """,
-        input_variables=["context", "question"]
+"""
+    response = requests.post(
+        "https://api.mistral.ai/v1/chat/completions",
+        headers={"Authorization": f"Bearer {MISTRAL_KEY}"},
+        json={
+            "model": "mistral-small-latest",
+            "messages": [
+                {"role": "user", "content": prompt}
+            ],
+            "temperature": 0.0
+        }
     )
 
+    response.raise_for_status()
 
-    docs = retriever.get_relevant_documents(question)
-    context = "\n\n".join(d.page_content for d in docs)
+    return response.json()["choices"][0]["message"]["content"]
 
-    return llm.invoke(prompt.format(context=context, question=question)).content
+
+# =========================
+# MAIN ENTRY
+# =========================
+def ask_policy_question(question: str):
+    docs, sources = search_documents(question)
+    answer = generate_answer(question, docs)
+
+    if sources:
+        first_policy = next(iter(sources.items()))
+        policy_name, policy_url = first_policy
+
+        answer += (
+            "\n\n---\n"
+            f"📎 View Full Policy:\n"
+            f"- {policy_name}: {policy_url}\n"
+        )
+
+    return answer
+
 
 if __name__ == "__main__":
-    while True:
-        q = input("\nAsk a Caizin policy question (or 'exit'): ")
-        if q.lower() == "exit":
-            break
-        print("\nAnswer:\n", ask_policy_question(q))
+    question = input("Ask a policy question: ")
+    answer = ask_policy_question(question)
+    print("\nAnswer:\n")
+    print(answer)
