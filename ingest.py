@@ -1,6 +1,7 @@
 import os
 import uuid
 import time
+from urllib.parse import quote
 from dotenv import load_dotenv
 from pypdf import PdfReader
 from openai import AzureOpenAI
@@ -117,6 +118,15 @@ def ingest_file(file_path):
     chunks = chunk_text(text)
     print(f"🔹 Total chunks: {len(chunks)}")
 
+    filename = os.path.basename(file_path)
+    policy_name = os.path.splitext(filename)[0].strip()
+
+    STORAGE_ACCOUNT = os.getenv("AZURE_STORAGE_ACCOUNT")
+    BLOB_CONTAINER = "policy-pdfs"
+
+    encoded_filename = quote(filename)
+    policy_url = f"https://{STORAGE_ACCOUNT}.blob.core.windows.net/{BLOB_CONTAINER}/{encoded_filename}"
+
     documents = []
     EMBED_BATCH_SIZE = 5
 
@@ -128,8 +138,11 @@ def ingest_file(file_path):
             documents.append({
                 "id": str(uuid.uuid4()),  # unchanged logic
                 "content": chunk,
-                "department": os.path.basename(file_path),
+                "department": filename,
+                "policy_name": policy_name,
+                "policy_url": policy_url,
                 "embedding": embedding
+                
             })
 
         time.sleep(1)

@@ -1,22 +1,19 @@
 import os
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, Response
 from fastapi.staticfiles import StaticFiles
+
 from botbuilder.core import BotFrameworkAdapter, BotFrameworkAdapterSettings
 from botbuilder.schema import Activity
 
-# Import your handlers (Keep these as they were in your project)
+# Your existing handlers
 from teams_bot import on_message_activity
 from teams_bot import send_suggested_questions
 from rag import ask_policy_question
-from botframework.connector.auth import AuthenticationConfiguration
-from botframework.connector.auth import MicrosoftAppCredentials
 
-# 1. Force the correct configuration
 APP_ID = os.getenv("MicrosoftAppId")
-APP_PASSWORD =os.getenv("MicrosoftAppPassword")
+APP_PASSWORD = os.getenv("MicrosoftAppPassword")
 TENANT_ID = os.getenv("MicrosoftAppTenantId")
 
-# 3. Setup the adapter
 settings = BotFrameworkAdapterSettings(
     app_id=APP_ID,
     app_password=APP_PASSWORD,
@@ -25,19 +22,20 @@ settings = BotFrameworkAdapterSettings(
 
 adapter = BotFrameworkAdapter(settings)
 app = FastAPI(title="Caizin Policy RAG Bot")
-app.mount("/static", StaticFiles(directory="static", html=True), name="static")
 
+if os.path.isdir("static"):
+    app.mount("/static", StaticFiles(directory="static", html=True), name="static")
 
 @app.post("/api/messages")
 async def messages(req: Request):
 
     if req.headers.get("content-length") == "0":
-        return {"error": "Empty request body"}
+        return Response(status_code=400)
 
     try:
         body = await req.json()
     except Exception:
-        return {"error": "Invalid JSON body"}
+        return Response(status_code=400)
 
     activity = Activity().deserialize(body)
     auth_header = req.headers.get("Authorization", "")
@@ -46,51 +44,48 @@ async def messages(req: Request):
 
         activity_type = turn_context.activity.type
 
-        # =========================
-        # 1️⃣ When conversation starts / bot is added
-        # =========================
+        # 1️⃣ Conversation started / Bot added
         if activity_type == "conversationUpdate":
-
             members_added = turn_context.activity.members_added or []
 
             for member in members_added:
-                # If added member is NOT the bot itself
                 if member.id != turn_context.activity.recipient.id:
                     await send_suggested_questions(turn_context)
                     return
 
-
-        # =========================
-        # 2️⃣ When user sends message (typed OR button click)
-        # =========================
+        # 2️⃣ User sent a message
         elif activity_type == "message":
 
             user_text = (turn_context.activity.text or "").strip().lower()
 
-            # If user greets or starts conversation
+            # Greeting triggers menu
             if user_text in ["hi", "hello", "hey", "start", "menu"]:
                 await send_suggested_questions(turn_context)
                 return
 
-            # Otherwise → normal RAG flow
+            # Otherwise → RAG logic
             await on_message_activity(turn_context)
             return
 
-
-        # =========================
-        # 3️⃣ Ignore other activity types safely
-        # =========================
+        # 3️⃣ Ignore everything else safely
         else:
             return
 
-    response = await adapter.process_activity(
+    # 🔥 CRITICAL FIX: Proper Bot Framework response handling
+    invoke_response = await adapter.process_activity(
         activity,
         auth_header,
         turn_handler
     )
 
-    return response or {}
+    if invoke_response:
+        return Response(
+            content=invoke_response.body,
+            status_code=invoke_response.status,
+            media_type="application/json"
+        )
 
+    return Response(status_code=201)
 
 @app.post("/ask")
 async def ask(req: Request):

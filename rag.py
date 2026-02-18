@@ -67,14 +67,21 @@ def search_documents(query: str):
 
     docs = []
     seen = set()
+    sources = {}
 
     for r in results:
         content = r.get("content")
+        policy_name = r.get("policy_name")
+        policy_url = r.get("policy_url")
+
         if content and content not in seen:
             docs.append(content)
             seen.add(content)
 
-    return docs[:12]
+        if policy_name and policy_url:
+            sources[policy_name] = policy_url
+
+    return docs[:12], sources   
 
 # =========================
 # MISTRAL GENERATION
@@ -135,8 +142,20 @@ You are an internal Caizin company policy assistant.
 # MAIN ENTRY
 # =========================
 def ask_policy_question(question: str):
-    docs = search_documents(question)
-    return generate_answer(question, docs)
+    docs, sources = search_documents(question)
+    answer = generate_answer(question, docs)
+
+    if sources:
+        first_policy = next(iter(sources.items()))
+        policy_name, policy_url = first_policy
+
+        answer += (
+            "\n\n---\n"
+            f"📎 View Full Policy:\n"
+            f"- {policy_name}: {policy_url}\n"
+        )
+
+    return answer
 
 
 if __name__ == "__main__":
