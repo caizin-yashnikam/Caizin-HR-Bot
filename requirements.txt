@@ -16,3 +16,4 @@ pypdf
 mistralai
 numpy
 aiohttp
+pandas
