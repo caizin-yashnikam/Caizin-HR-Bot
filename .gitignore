@@ -1,1 +1,24 @@
-.DS_Store
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+
+# Virtual environments
+venv/
+antenv/
+.env
+env/
+
+# IDE
+.vscode/
+.idea/
+
+# Azure
+*.zip
+local.settings.json
+
+# Documents (don't commit policy PDFs to git)
+documents/
