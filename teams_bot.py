@@ -1,12 +1,15 @@
 from botbuilder.core import TurnContext
-from botbuilder.schema import HeroCard, CardAction, ActionTypes, Activity, ActivityTypes, Attachment
-from fastapi import logger
+from botbuilder.schema import Activity, ActivityTypes, Attachment
+from botbuilder.schema import HeroCard, CardAction, ActionTypes
+import json
 import logging
 from rag import ask_policy_question
 
 
-
 logger = logging.getLogger(__name__)
+
+# Sentinel value used to trigger the Apply Leave form from the welcome card
+APPLY_LEAVE_TRIGGER = "__open_apply_leave_form__"
 
 
 # =========================
@@ -77,6 +80,8 @@ async def on_message_activity(turn_context: TurnContext):
 
     answer = ask_policy_question(user_text, employee_email=employee_email)
     await turn_context.send_activity(answer)
+
+
 # =========================
 # APPLY LEAVE FORM  (Adaptive Card with dropdowns + date inputs)
 # =========================
