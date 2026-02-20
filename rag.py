@@ -23,25 +23,36 @@ AZURE_OPENAI_DEPLOYMENT = os.getenv("AZURE_OPENAI_DEPLOYMENT")
 MISTRAL_KEY = os.getenv("MISTRAL_API_KEY")
 
 # =========================
-# CLIENTS  (unchanged)
+# CLIENTS  (lazy — created on first use so module import never blocks)
 # =========================
-search_client = SearchClient(
-    endpoint=SEARCH_ENDPOINT,
-    index_name=INDEX_NAME,
-    credential=AzureKeyCredential(SEARCH_KEY),
-)
+_search_client = None
+_azure_client  = None
 
-azure_client = AzureOpenAI(
-    api_key=AZURE_OPENAI_API_KEY,
-    azure_endpoint=AZURE_OPENAI_ENDPOINT,
-    api_version="2024-02-15-preview"
-)
+def _get_search_client():
+    global _search_client
+    if _search_client is None:
+        _search_client = SearchClient(
+            endpoint=SEARCH_ENDPOINT,
+            index_name=INDEX_NAME,
+            credential=AzureKeyCredential(SEARCH_KEY),
+        )
+    return _search_client
+
+def _get_azure_client():
+    global _azure_client
+    if _azure_client is None:
+        _azure_client = AzureOpenAI(
+            api_key=AZURE_OPENAI_API_KEY,
+            azure_endpoint=AZURE_OPENAI_ENDPOINT,
+            api_version="2024-02-15-preview"
+        )
+    return _azure_client
 
 # =========================
 # EMBEDDING  (unchanged)
 # =========================
 def get_query_embedding(text):
-    response = azure_client.embeddings.create(
+    response = _get_azure_client().embeddings.create(
         model=AZURE_OPENAI_DEPLOYMENT,
         input=text
     )
@@ -60,7 +71,7 @@ def search_documents(query: str):
         fields="embedding"
     )
 
-    results = search_client.search(
+    results = _get_search_client().search(
         search_text=query,
         vector_queries=[vector_query],
         top=8
