@@ -80,7 +80,7 @@ async def on_message_activity(turn_context: TurnContext):
 
 
 # =========================
-# WELCOME CARD  (updated: added Leave Balance button)
+# WELCOME CARD
 # =========================
 async def send_suggested_questions(turn_context: TurnContext):
 
