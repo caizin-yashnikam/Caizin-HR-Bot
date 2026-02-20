@@ -77,10 +77,105 @@ async def on_message_activity(turn_context: TurnContext):
 
     answer = ask_policy_question(user_text, employee_email=employee_email)
     await turn_context.send_activity(answer)
+# =========================
+# APPLY LEAVE FORM  (Adaptive Card with dropdowns + date inputs)
+# =========================
+async def send_apply_leave_form(turn_context: TurnContext):
+    """Send an Adaptive Card form for applying leave."""
+
+    card_json = {
+        "type": "AdaptiveCard",
+        "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
+        "version": "1.4",
+        "body": [
+            {
+                "type": "TextBlock",
+                "text": "📅 Apply for Leave",
+                "size": "Large",
+                "weight": "Bolder",
+                "color": "Accent"
+            },
+            {
+                "type": "TextBlock",
+                "text": "Fill in the details below and hit **Submit**.",
+                "wrap": True,
+                "isSubtle": True,
+                "spacing": "Small"
+            },
+            {
+                "type": "Input.ChoiceSet",
+                "id": "leave_type",
+                "label": "Leave Type",
+                "isRequired": True,
+                "errorMessage": "Please select a leave type.",
+                "choices": [
+                    {"title": "Casual Leave",    "value": "Casual Leave"},
+                    {"title": "Sick Leave",      "value": "Sick Leave"},
+                    {"title": "Earned Leave",    "value": "Earned Leave"},
+                    {"title": "Compensatory Off","value": "Compensatory Off"},
+                    {"title": "Maternity Leave", "value": "Maternity Leave"},
+                    {"title": "Paternity Leave", "value": "Paternity Leave"},
+                    {"title": "Loss of Pay",     "value": "Loss of Pay"},
+                ],
+                "placeholder": "Select leave type",
+                "style": "compact"
+            },
+            {
+                "type": "Input.Date",
+                "id": "from_date",
+                "label": "From Date",
+                "isRequired": True,
+                "errorMessage": "Please select a start date."
+            },
+            {
+                "type": "Input.Date",
+                "id": "to_date",
+                "label": "To Date",
+                "isRequired": True,
+                "errorMessage": "Please select an end date."
+            },
+            {
+                "type": "Input.Text",
+                "id": "reason",
+                "label": "Reason (optional)",
+                "placeholder": "e.g. Personal work",
+                "isMultiline": True
+            }
+        ],
+        "actions": [
+            {
+                "type": "Action.Submit",
+                "title": "✅ Submit Leave",
+                "data": {
+                    "action": "apply_leave_submit"
+                },
+                "style": "positive"
+            },
+            {
+                "type": "Action.Submit",
+                "title": "✖ Cancel",
+                "data": {
+                    "action": "apply_leave_cancel"
+                }
+            }
+        ]
+    }
+
+    attachment = Attachment(
+        content_type="application/vnd.microsoft.card.adaptive",
+        content=card_json
+    )
+
+    reply = Activity(
+        type="message",
+        attachments=[attachment]
+    )
+
+    await turn_context.send_activity(reply)
 
 
 # =========================
-# WELCOME CARD
+# WELCOME CARD  (updated: added Leave Balance + Apply Leave buttons)
 # =========================
 async def send_suggested_questions(turn_context: TurnContext):
 
@@ -92,6 +187,11 @@ async def send_suggested_questions(turn_context: TurnContext):
                 type=ActionTypes.im_back,
                 title="My Leave Balance",
                 value="What is my leave balance?"
+            ),
+            CardAction(
+                type=ActionTypes.im_back,
+                title="📝 Apply Leave",
+                value=APPLY_LEAVE_TRIGGER
             ),
             CardAction(
                 type=ActionTypes.im_back,
