@@ -33,7 +33,7 @@ def _get_employee_email(turn_context: TurnContext) -> str:
     logger.info(f"[email] from_prop.name: {from_prop.name}")
     logger.info(f"[email] aad_object_id:  {getattr(from_prop, 'aad_object_id', None)}")
 
-     # Also log channel_data for extra info
+    # Also log channel_data for extra info
     channel_data = turn_context.activity.channel_data or {}
     logger.info(f"[email] channel_data: {channel_data}")
 
@@ -50,7 +50,7 @@ def _get_employee_email(turn_context: TurnContext) -> str:
         logger.info(f"[email] ✅ found in id: {user_id}")
         return user_id.lower().strip()
 
-      # Option 3: Construct email from display name as firstname.lastname@caizin.com
+    # Option 3: Construct email from display name as firstname.lastname@caizin.com
     if name:
         parts = name.lower().split()
         email = f"{parts[0]}.{parts[-1]}@caizin.com" if len(parts) >= 2 else f"{parts[0]}@caizin.com"

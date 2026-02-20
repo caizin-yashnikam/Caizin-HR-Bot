@@ -1,10 +1,11 @@
 import json
 import os
+import sys
 from fastapi import FastAPI, Request, Response
 from fastapi.staticfiles import StaticFiles
 
 from botbuilder.core import BotFrameworkAdapter, BotFrameworkAdapterSettings
-from botbuilder.schema import Activity
+from botbuilder.schema import Activity, ActivityTypes
 
 from teams_bot import on_message_activity, send_suggested_questions, send_apply_leave_form, APPLY_LEAVE_TRIGGER
 from rag import ask_policy_question
@@ -60,7 +61,6 @@ async def messages(req: Request):
 
             # ── Cancel button ────────────────────────────────────────────
             if action == "apply_leave_cancel":
-                from botbuilder.schema import Activity as _Activity, ActivityTypes as _AT
                 await turn_context.send_activity("Leave application cancelled.")
                 return
 
